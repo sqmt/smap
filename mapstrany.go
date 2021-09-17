@@ -1,77 +1,61 @@
 package smap
 
-import "sync"
-
 type MapStrAny struct {
-    mutex *sync.RWMutex
-    data  map[string]interface{}
+    any *MapAny
 }
 
-func NewMapStrAny() *MapStrAny {
+// NewMapStrAny 创建一个MapStrAny对象
+// 默认是非并发安全的，如果传入safe参数为true则开启并发安全锁
+func NewMapStrAny(safe ...bool) *MapStrAny {
     return &MapStrAny{
-        mutex: new(sync.RWMutex),
-        data:  make(map[string]interface{}),
+        any: NewMapAny(safe...),
     }
 }
 
-func (c *MapStrAny) Keys() []string {
-    c.mutex.Lock()
-    defer c.mutex.Unlock()
-    keys := make([]string, 0)
-    for s := range c.data {
-        keys = append(keys, s)
+// Get 获取value
+func (a *MapStrAny) Get(key string) (val interface{}, ok bool, err error) {
+    return a.any.Get(key)
+}
+
+// Set 设置k/v
+func (a *MapStrAny) Set(key string, value interface{}) (err error) {
+    return a.any.Set(key, value)
+}
+
+// Has 检查key是否存在
+func (a *MapStrAny) Has(key string) (b bool) {
+    return a.any.Has(key)
+}
+
+// Remove 移除单个或多个key
+func (a *MapStrAny) Remove(keys ...string) (err error) {
+    ks := make([]interface{}, 0)
+    for _, key := range keys {
+        ks = append(ks, key)
     }
-    return keys
+    return a.any.Remove(ks...)
 }
 
-func (c *MapStrAny) Size() int {
-    c.mutex.Lock()
-    defer c.mutex.Unlock()
-
-    return len(c.data)
+// Keys 获取所有key
+func (a *MapStrAny) Keys() []string {
+    ks := make([]string, 0)
+    for _, k := range a.any.Keys() {
+        ks = append(ks, k.(string))
+    }
+    return ks
 }
 
-func (c *MapStrAny) All() map[string]interface{} {
-    c.mutex.Lock()
-    defer c.mutex.Unlock()
-    return c.data
+// Size 获取数据长度
+func (a *MapStrAny) Size() int {
+    return a.any.Size()
 }
 
-func (c *MapStrAny) Has(key string) bool {
-    c.mutex.Lock()
-    defer c.mutex.Unlock()
-    _, ok := c.data[key]
-
-    return ok
-}
-
-func (c *MapStrAny) Get(key string) interface{} {
-    if c.Has(key) {
-        return c.data[key]
+// All 获取所有数据
+func (a *MapStrAny) All() map[string]interface{} {
+    kvs := make(map[string]interface{})
+    for i, v := range a.any.All() {
+        kvs[i.(string)] = v
     }
 
-    return nil
-}
-
-func (c *MapStrAny) Set(key string, value interface{}) {
-    c.mutex.Lock()
-    defer c.mutex.Unlock()
-    c.data[key] = value
-}
-
-func (c *MapStrAny) Remove(key ...string) {
-    if len(key) == 0 {
-        return
-    }
-    c.mutex.Lock()
-    defer c.mutex.Unlock()
-    for _, s := range key {
-        delete(c.data, s)
-    }
-}
-
-func (c *MapStrAny) Load(key string) (i interface{}, ok bool) {
-    i = c.Get(key)
-
-    return i, i != nil
+    return kvs
 }

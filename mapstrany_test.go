@@ -1,33 +1,56 @@
-package smap_test
+package smap
 
 import (
     "reflect"
     "testing"
-
-    "github.com/sqmt/blu-core/library/smap"
 )
 
-type mock struct {
-    key   string
-    value interface{}
+func getMapStrAny(data map[string]interface{}, safe ...bool) *MapStrAny {
+    m := NewMapStrAny(safe...)
+    for i, i2 := range data {
+        m.Set(i, i2)
+    }
+
+    return m
 }
 
-func TestMapStrAny_All(t *testing.T) {
+func TestNewMapStrAny(t *testing.T) {
+    type args struct {
+        safe []bool
+    }
     tests := []struct {
         name string
-        want map[string]interface{}
-        mock []mock
+        args args
+        want *MapStrAny
     }{
-        {name: "empty", want: map[string]interface{}{}},
-        {name: "all", want: map[string]interface{}{"test1": 1, "test2": 2}, mock: []mock{{"test1", 1}, {"test2", 2}}},
+        {name: "unsafe", want: &MapStrAny{any: &MapAny{safe: false, data: map[interface{}]interface{}{}}}, args: args{}},
+        {name: "safe", want: &MapStrAny{any: NewMapAny(true)}, args: args{[]bool{true}}},
     }
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            c := smap.NewMapStrAny()
-            for _, m := range tt.mock {
-                c.Set(m.key, m.value)
+            if got := NewMapStrAny(tt.args.safe...); !reflect.DeepEqual(got, tt.want) {
+                t.Errorf("NewMapStrAny() = %v, want %v", got, tt.want)
             }
-            if got := c.All(); !reflect.DeepEqual(got, tt.want) {
+        })
+    }
+}
+
+func TestMapStrAny_All(t *testing.T) {
+    data := map[string]interface{}{"1": 1, "2": 2, "3": "3"}
+
+    tests := []struct {
+        name string
+        a    *MapStrAny
+        want map[string]interface{}
+    }{
+        {name: "unsafe empty", a: getMapStrAny(nil), want: map[string]interface{}{}},
+        {name: "unsafe not empty", a: getMapStrAny(data), want: data},
+        {name: "safe empty", a: getMapStrAny(nil, true), want: map[string]interface{}{}},
+        {name: "safe not empty", a: getMapStrAny(data, true), want: data},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            if got := tt.a.All(); !reflect.DeepEqual(got, tt.want) {
                 t.Errorf("All() = %v, want %v", got, tt.want)
             }
         })
@@ -39,23 +62,30 @@ func TestMapStrAny_Get(t *testing.T) {
         key string
     }
     tests := []struct {
-        name string
-        args args
-        want interface{}
-        mock []mock
+        name    string
+        a       *MapStrAny
+        args    args
+        wantVal interface{}
+        wantOk  bool
+        wantErr bool
     }{
-        {name: "empty", args: args{"test"}, want: nil},
-        {name: "not found", args: args{"test"}, want: nil, mock: []mock{{"test1", 1}, {"test2", 2}}},
-        {name: "found", args: args{"test1"}, want: 1, mock: []mock{{"test1", 1}, {"test2", 2}}},
+        {name: "unsafe not found", a: getMapStrAny(map[string]interface{}{"a": 1}), args: args{"test"}, wantVal: nil, wantOk: false, wantErr: false},
+        {name: "unsafe found", a: getMapStrAny(map[string]interface{}{"test": 1}), args: args{"test"}, wantVal: 1, wantOk: true, wantErr: false},
+        {name: "safe not found", a: getMapStrAny(map[string]interface{}{"a": 1}, true), args: args{"test"}, wantVal: nil, wantOk: false, wantErr: false},
+        {name: "safe found", a: getMapStrAny(map[string]interface{}{"test": 1}, true), args: args{"test"}, wantVal: 1, wantOk: true, wantErr: false},
     }
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            c := smap.NewMapStrAny()
-            for _, m := range tt.mock {
-                c.Set(m.key, m.value)
+            gotVal, gotOk, err := tt.a.Get(tt.args.key)
+            if (err != nil) != tt.wantErr {
+                t.Errorf("Get() error = %v, wantErr %v", err, tt.wantErr)
+                return
             }
-            if got := c.Get(tt.args.key); !reflect.DeepEqual(got, tt.want) {
-                t.Errorf("Get() = %v, want %v", got, tt.want)
+            if !reflect.DeepEqual(gotVal, tt.wantVal) {
+                t.Errorf("Get() gotVal = %v, want %v", gotVal, tt.wantVal)
+            }
+            if gotOk != tt.wantOk {
+                t.Errorf("Get() gotOk = %v, want %v", gotOk, tt.wantOk)
             }
         })
     }
@@ -66,75 +96,45 @@ func TestMapStrAny_Has(t *testing.T) {
         key string
     }
     tests := []struct {
-        name string
-        args args
-        want bool
-        mock []mock
+        name  string
+        a     *MapStrAny
+        args  args
+        wantB bool
     }{
-        {name: "not found", args: args{"test"}, want: false},
-        {name: "found", args: args{"test"}, want: true, mock: []mock{{"test", 1}, {"test2", 2}}},
+        {name: "unsafe not found", a: getMapStrAny(map[string]interface{}{"a": 1}), args: args{"test"}, wantB: false},
+        {name: "unsafe found", a: getMapStrAny(map[string]interface{}{"test": 1}), args: args{"test"}, wantB: true},
+        {name: "safe not found", a: getMapStrAny(map[string]interface{}{"a": 1}, true), args: args{"test"}, wantB: false},
+        {name: "safe found", a: getMapStrAny(map[string]interface{}{"test": 1}, true), args: args{"test"}, wantB: true},
     }
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            c := smap.NewMapStrAny()
-            for _, m := range tt.mock {
-                c.Set(m.key, m.value)
-            }
-            if got := c.Has(tt.args.key); got != tt.want {
-                t.Errorf("Has() = %v, want %v", got, tt.want)
+            if gotB := tt.a.Has(tt.args.key); gotB != tt.wantB {
+                t.Errorf("Has() = %v, want %v", gotB, tt.wantB)
             }
         })
     }
 }
 
 func TestMapStrAny_Keys(t *testing.T) {
+    data := map[string]interface{}{"1": 1, "2": 2, "3": "3"}
     tests := []struct {
         name string
+        a    *MapStrAny
         want []string
-        mock []mock
     }{
-        {name: "empty", want: []string{}},
-        {name: "all", want: []string{"test", "test2"}, mock: []mock{{"test", 1}, {"test2", 2}}},
+        {name: "unsafe empty", a: getMapStrAny(nil), want: []string{}},
+        {name: "unsafe not empty", a: getMapStrAny(data), want: []string{"1", "2", "3"}},
+        {name: "safe empty", a: getMapStrAny(nil, true), want: []string{}},
+        {name: "safe not empty", a: getMapStrAny(data, true), want: []string{"1", "2", "3"}},
     }
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            c := smap.NewMapStrAny()
-            for _, m := range tt.mock {
-                c.Set(m.key, m.value)
-            }
-            if got := c.Keys(); !reflect.DeepEqual(got, tt.want) {
+            got := tt.a.Keys()
+            if len(got) != len(tt.want) {
                 t.Errorf("Keys() = %v, want %v", got, tt.want)
             }
-        })
-    }
-}
-
-func TestMapStrAny_Load(t *testing.T) {
-    type args struct {
-        key string
-    }
-    tests := []struct {
-        name   string
-        args   args
-        wantI  interface{}
-        wantOk bool
-        mock   []mock
-    }{
-        {name: "empty", args: args{"test"}, wantI: nil, wantOk: false},
-        {name: "found", args: args{"test"}, wantI: 1, wantOk: true, mock: []mock{{"test", 1}, {"test2", 2}}},
-    }
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            c := smap.NewMapStrAny()
-            for _, m := range tt.mock {
-                c.Set(m.key, m.value)
-            }
-            gotI, gotOk := c.Load(tt.args.key)
-            if !reflect.DeepEqual(gotI, tt.wantI) {
-                t.Errorf("Load() gotI = %v, want %v", gotI, tt.wantI)
-            }
-            if gotOk != tt.wantOk {
-                t.Errorf("Load() gotOk = %v, want %v", gotOk, tt.wantOk)
+            if err := tt.a.Remove(tt.want...); err != nil || len(tt.a.Keys()) != 0 {
+                t.Errorf("Keys() = %v, want %v", got, tt.want)
             }
         })
     }
@@ -142,28 +142,27 @@ func TestMapStrAny_Load(t *testing.T) {
 
 func TestMapStrAny_Remove(t *testing.T) {
     type args struct {
-        key []string
+        keys []string
     }
     tests := []struct {
-        name string
-        args args
-        mock []mock
-        want int
+        name     string
+        a        *MapStrAny
+        args     args
+        wantErr  bool
+        wantKeys []string
     }{
-        {name: "remove empty", args: args{}, mock: []mock{}},
-        {name: "remove empty1", args: args{key: []string{"test"}}, mock: []mock{}},
-        {name: "remove one", args: args{key: []string{"test"}}, mock: []mock{{"test", 1}, {"test2", 2}}, want: 1},
-        {name: "remove more", args: args{key: []string{"test", "test2"}}, mock: []mock{{"test", 1}, {"test2", 2}}},
+        {name: "unsafe one", a: getMapStrAny(map[string]interface{}{"a": 1}), args: args{[]string{"test"}}, wantErr: false, wantKeys: []string{"a"}},
+        {name: "unsafe two", a: getMapStrAny(map[string]interface{}{"test": 1, "b": 1}), args: args{[]string{"test", "b"}}, wantErr: false, wantKeys: []string{}},
+        {name: "safe one", a: getMapStrAny(map[string]interface{}{"a": 1}, true), args: args{[]string{"test"}}, wantErr: false, wantKeys: []string{"a"}},
+        {name: "safe two", a: getMapStrAny(map[string]interface{}{"test": 1, "b": 1}, true), args: args{[]string{"test", "b"}}, wantErr: false, wantKeys: []string{}},
     }
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            c := smap.NewMapStrAny()
-            for _, m := range tt.mock {
-                c.Set(m.key, m.value)
+            if err := tt.a.Remove(tt.args.keys...); (err != nil) != tt.wantErr {
+                t.Errorf("Remove() error = %v, wantErr %v", err, tt.wantErr)
             }
-            c.Remove(tt.args.key...)
-            if got := c.Size(); got != tt.want {
-                t.Errorf("Remove() failed, got %v, want %v", got, tt.want)
+            if keys := tt.a.Keys(); !reflect.DeepEqual(keys, tt.wantKeys) {
+                t.Errorf("Remove() error = key not removed, wantKeys %v, got %v", tt.wantKeys, keys)
             }
         })
     }
@@ -175,18 +174,23 @@ func TestMapStrAny_Set(t *testing.T) {
         value interface{}
     }
     tests := []struct {
-        name string
-        args args
-        want interface{}
+        name    string
+        a       *MapStrAny
+        args    args
+        wantErr bool
     }{
-        {name: "set", args: args{"test", 1}, want: 1},
+        {name: "unsafe one", a: getMapStrAny(map[string]interface{}{}), args: args{"test", 1}, wantErr: false},
+        {name: "unsafe two", a: getMapStrAny(map[string]interface{}{}), args: args{"test", []string{"test"}}, wantErr: false},
+        {name: "safe one", a: getMapStrAny(map[string]interface{}{}, true), args: args{"test", 1}, wantErr: false},
+        {name: "safe two", a: getMapStrAny(map[string]interface{}{}, true), args: args{"test", []string{"test"}}, wantErr: false},
     }
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            c := smap.NewMapStrAny()
-            c.Set(tt.args.key, tt.args.value)
-            if got := c.Get(tt.args.key); !reflect.DeepEqual(got, tt.want) {
-                t.Errorf("Set() faild, got %v, want %v", got, tt.want)
+            if err := tt.a.Set(tt.args.key, tt.args.value); (err != nil) != tt.wantErr {
+                t.Errorf("Set() error = %v, wantErr %v", err, tt.wantErr)
+            }
+            if v, ok, err := tt.a.Get(tt.args.key); !tt.wantErr && (!ok || err != nil || !reflect.DeepEqual(v, tt.args.value)) {
+                t.Errorf("Set failed, Get() error = %v, ok %v wantVal %v got %v", err, ok, tt.args.value, v)
             }
         })
     }
@@ -195,42 +199,63 @@ func TestMapStrAny_Set(t *testing.T) {
 func TestMapStrAny_Size(t *testing.T) {
     tests := []struct {
         name string
+        a    *MapStrAny
         want int
-        mock []mock
     }{
-        {name: "size empty", want: 0},
-        {name: "size 1", want: 1, mock: []mock{{"test", 1}}},
-        {name: "size 2", want: 2, mock: []mock{{"test", 1}, {"test2", 2}}},
+        {name: "unsafe one", a: getMapStrAny(map[string]interface{}{"a": 1}), want: 1},
+        {name: "unsafe two", a: getMapStrAny(map[string]interface{}{"test": 1, "b": 1}), want: 2},
+        {name: "unsafe three", a: getMapStrAny(map[string]interface{}{}), want: 0},
+        {name: "safe one", a: getMapStrAny(map[string]interface{}{"a": 1}), want: 1},
+        {name: "safe two", a: getMapStrAny(map[string]interface{}{"test": 1, "b": 1}), want: 2},
+        {name: "safe three", a: getMapStrAny(map[string]interface{}{}), want: 0},
     }
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            c := smap.NewMapStrAny()
-            for _, m := range tt.mock {
-                c.Set(m.key, m.value)
-            }
-            if got := c.Size(); got != tt.want {
+            if got := tt.a.Size(); got != tt.want {
                 t.Errorf("Size() = %v, want %v", got, tt.want)
             }
         })
     }
 }
 
-func BenchmarkNewMapStrAny(b *testing.B) {
+func BenchmarkNewMapStrAny_unsafe(b *testing.B) {
     for i := 0; i < b.N; i++ {
-        smap.NewMapStrAny()
+        NewMapStrAny()
     }
 }
 
-func BenchmarkMapStrAny_Set(b *testing.B) {
-    s := smap.NewMapStrAny()
+func BenchmarkNewMapStrAny_safe(b *testing.B) {
     for i := 0; i < b.N; i++ {
-        s.Set("test", i)
+        NewMapStrAny(true)
     }
 }
-func BenchmarkMapStrAny_Get(b *testing.B) {
-    s := smap.NewMapStrAny()
-    s.Set("test", 1)
+
+func BenchmarkMapStrAny_Set_unsafe(b *testing.B) {
+    m := NewMapStrAny()
     for i := 0; i < b.N; i++ {
-        s.Get("test")
+        m.Set("test", "test")
+    }
+}
+
+func BenchmarkMapStrAny_Set_safe(b *testing.B) {
+    m1 := NewMapStrAny(true)
+    for i := 0; i < b.N; i++ {
+        m1.Set("test", "test")
+    }
+}
+
+func BenchmarkMapStrAny_Get_unsafe(b *testing.B) {
+    m := NewMapStrAny()
+    m.Set("test", "test")
+    for i := 0; i < b.N; i++ {
+        m.Get("test")
+    }
+}
+
+func BenchmarkMapStrAny_Get_safe(b *testing.B) {
+    m1 := NewMapStrAny(true)
+    m1.Set("test", "test")
+    for i := 0; i < b.N; i++ {
+        m1.Get("test")
     }
 }
